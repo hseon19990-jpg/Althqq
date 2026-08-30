@@ -67,6 +67,17 @@ def set_user_verified(user_id):
     conn.commit()
     conn.close()
 
+def reset_user_verification(user_id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute(
+        "UPDATE users SET is_verified=0, verification_state=NULL WHERE user_id=?",
+        (user_id,)
+    )
+    conn.commit()
+    conn.close()
+    pending_verifications.pop(user_id, None)
+
 def set_verification_state(user_id, state):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -189,29 +200,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             referrer_id = None
 
     add_user(user_id, referrer_id)
-    user = get_user(user_id)
-    is_verified = user[2]
-
-    if is_verified:
-        bot_username = (await context.bot.get_me()).username
-        referral_link = f"https://t.me/{bot_username}?start=ref={user_id}"
-        await update.message.reply_text(
-            f"مرحبًا بك! رابط الإحالة الخاص بك:\n{referral_link}",
-            reply_markup=main_keyboard(user_id)
-        )
-        return
-
+    reset_user_verification(user_id)
     if referrer_id is None:
-        set_user_verified(user_id)
-        bot_username = (await context.bot.get_me()).username
-        referral_link = f"https://t.me/{bot_username}?start=ref={user_id}"
-        await update.message.reply_text(
-            f"أهلاً بك! أنت لست بحاجة للتحقق.\nرابط الإحالة الخاص بك:\n{referral_link}",
-            reply_markup=main_keyboard(user_id)
-        )
-        return
-
-    await update.message.reply_text("مرحبًا! تم تسجيل دخولك عبر رابط إحالة. يجب عليك تجاوز التحقق.")
+        message = "مرحبًا! يجب إكمال التحقق للمتابعة."
+    else:
+        message = "مرحبًا! يجب إكمال التحقق عبر رابط الإحالة للمتابعة."
+    await update.message.reply_text(
+        message,
+        reply_markup=main_keyboard(user_id)
+    )
     await start_verification(update, context, user_id)
 
 # معالج الرسائل النصية
@@ -272,7 +269,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if text == pending["expected"]:
                 set_user_verified(user_id)
                 set_verification_state(user_id, None)
-                await update.message.reply_text("✅ تم التحقق بنجاح! مرحبًا بك في المجموعة.")
+                await update.message.reply_text(
+                    "✅ تم التحقق بنجاح! مرحبًا بك في المجموعة.",
+                    reply_markup=main_keyboard(user_id)
+                )
             else:
                 await update.message.reply_text("النص غير صحيح. حاول مرة أخرى بإرسال النص المطلوب.")
     elif state == "awaiting_arithmetic":
@@ -283,7 +283,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if user_answer == pending["answer"]:
                     set_user_verified(user_id)
                     set_verification_state(user_id, None)
-                    await update.message.reply_text("✅ إجابة صحيحة! تم التحقق.")
+                    await update.message.reply_text(
+                        "✅ إجابة صحيحة! تم التحقق.",
+                        reply_markup=main_keyboard(user_id)
+                    )
                 else:
                     await update.message.reply_text("إجابة خاطئة. حاول مرة أخرى.")
             except ValueError:
@@ -294,7 +297,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if text == pending["expected"]:
                 set_user_verified(user_id)
                 set_verification_state(user_id, None)
-                await update.message.reply_text("✅ تم التحقق بنجاح!")
+                await update.message.reply_text(
+                    "✅ تم التحقق بنجاح!",
+                    reply_markup=main_keyboard(user_id)
+                )
             else:
                 await update.message.reply_text("النص غير صحيح. أعد المحاولة.")
     else:
@@ -314,7 +320,10 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if state == "awaiting_contact" and update.message.contact:
         set_user_verified(user_id)
         set_verification_state(user_id, None)
-        await update.message.reply_text("✅ تم التحقق بنجاح عبر جهة الاتصال!")
+        await update.message.reply_text(
+            "✅ تم التحقق بنجاح عبر جهة الاتصال!",
+            reply_markup=main_keyboard(user_id)
+        )
     else:
         await update.message.reply_text("لم تستلم جهة اتصال. استخدم زر مشاركة جهة الاتصال.")
 
