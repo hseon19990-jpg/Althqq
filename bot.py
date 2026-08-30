@@ -273,13 +273,22 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # حالة إضافة ملصقات من المالك
     if user_id == ADMIN_ID and user[3] == "awaiting_sticker_add":
         file_id = update.message.sticker.file_id
+        saved_before = len(get_premium_stickers())
         add_premium_sticker(file_id)
-        remaining = 5 - len(get_premium_stickers())
-        if remaining > 0:
-            await update.message.reply_text(f"تم استلام الملصق. أرسل {remaining} ملصقات متبقية.")
+        saved_count = len(get_premium_stickers())
+        if saved_count == saved_before:
+            await update.message.reply_text(
+                f"هذا الملصق مكرر. المحفوظ حاليًا: {saved_count}/5. أرسل ملصقًا مختلفًا."
+            )
+        elif saved_count < 5:
+            await update.message.reply_text(
+                f"تم حفظ الملصق {saved_count}/5. أرسل الملصق التالي."
+            )
         else:
             set_verification_state(user_id, None)
-            await update.message.reply_text("✅ تم حفظ 5 ملصقات بنجاح!")
+            await update.message.reply_text(
+                "✅ اكتمل حفظ الملصقات المدفوعة 5/5، وأصبحت جاهزة لاستخدامها في التحقق."
+            )
         return
 
     # التحقق من ملصق المستخدم
@@ -405,7 +414,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
-    app.add_handler(MessageHandler(filters.Sticker, handle_sticker))
+    app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
