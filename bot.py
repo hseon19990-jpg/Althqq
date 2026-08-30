@@ -115,6 +115,17 @@ def generate_arithmetic():
         result = a * b
     return f"{a} {op} {b} = ?", result
 
+def main_keyboard(user_id):
+    rows = [
+        [KeyboardButton("🔗 رابط الإحالة"), KeyboardButton("ℹ️ المساعدة")]
+    ]
+    if user_id == ADMIN_ID:
+        rows.insert(0, [
+            KeyboardButton("⚙️ إعداد التحقق"),
+            KeyboardButton("🧩 إضافة الملصقات")
+        ])
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+
 async def start_verification(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     method = get_setting("verification_method", "text")
     if method == "text":
@@ -184,14 +195,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_verified:
         bot_username = (await context.bot.get_me()).username
         referral_link = f"https://t.me/{bot_username}?start=ref={user_id}"
-        await update.message.reply_text(f"مرحبًا بك! رابط الإحالة الخاص بك:\n{referral_link}")
+        await update.message.reply_text(
+            f"مرحبًا بك! رابط الإحالة الخاص بك:\n{referral_link}",
+            reply_markup=main_keyboard(user_id)
+        )
         return
 
     if referrer_id is None:
         set_user_verified(user_id)
         bot_username = (await context.bot.get_me()).username
         referral_link = f"https://t.me/{bot_username}?start=ref={user_id}"
-        await update.message.reply_text(f"أهلاً بك! أنت لست بحاجة للتحقق.\nرابط الإحالة الخاص بك:\n{referral_link}")
+        await update.message.reply_text(
+            f"أهلاً بك! أنت لست بحاجة للتحقق.\nرابط الإحالة الخاص بك:\n{referral_link}",
+            reply_markup=main_keyboard(user_id)
+        )
         return
 
     await update.message.reply_text("مرحبًا! تم تسجيل دخولك عبر رابط إحالة. يجب عليك تجاوز التحقق.")
@@ -203,13 +220,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(user_id)
     if not user:
         return
+    text = update.message.text or ""
+
+    # أزرار لوحة التحكم بدل كتابة الأوامر
+    if text == "⚙️ إعداد التحقق":
+        if user_id == ADMIN_ID:
+            await set_verify(update, context)
+        else:
+            await update.message.reply_text("عذرًا، هذا الزر للمالك فقط.")
+        return
+
+    if text == "🧩 إضافة الملصقات":
+        if user_id == ADMIN_ID:
+            await add_sticker(update, context)
+        else:
+            await update.message.reply_text("عذرًا، هذا الزر للمالك فقط.")
+        return
+
+    if text == "🔗 رابط الإحالة":
+        bot_username = (await context.bot.get_me()).username
+        referral_link = f"https://t.me/{bot_username}?start=ref={user_id}"
+        await update.message.reply_text(
+            f"رابط الإحالة الخاص بك:\n{referral_link}",
+            reply_markup=main_keyboard(user_id)
+        )
+        return
+
+    if text == "ℹ️ المساعدة":
+        await help(update, context)
+        return
+
     is_verified = user[2]
     if is_verified:
         await update.message.reply_text("أنت مستخدم موثوق.")
         return
 
     state = user[3]
-    text = update.message.text
 
     if state == "awaiting_text":
         pending = pending_verifications.get(user_id)
@@ -381,7 +427,10 @@ async def handle_set_verify_callback(update: Update, context: ContextTypes.DEFAU
         method = data.split(":", 1)[1]
         set_setting("verification_method", method)
         if method == "sticker":
-            await query.edit_message_text("تم اختيار التحقق بالملصقات المدفوعة.\nالآن أرسل الأمر /addsticker لتسجيل 5 ملصقات.")
+            await query.edit_message_text(
+                "تم اختيار التحقق بالملصقات المدفوعة.\n"
+                "استخدم زر «🧩 إضافة الملصقات» لتسجيل 5 ملصقات."
+            )
         else:
             await query.edit_message_text(f"تم تعيين طريقة التحقق إلى: {method}")
 
@@ -392,11 +441,20 @@ async def add_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     clear_premium_stickers()
     set_verification_state(ADMIN_ID, "awaiting_sticker_add")
-    await update.message.reply_text("أرسل الآن 5 ملصقات (مدفوعة) واحدة تلو الأخرى.")
+    await update.message.reply_text(
+        "أرسل الآن 5 ملصقات (مدفوعة) واحدة تلو الأخرى.",
+        reply_markup=main_keyboard(ADMIN_ID)
+    )
 
 # معالج الأوامر العامة
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("هذا بوت إحالات وتحقق. أرسل /start للحصول على رابط الإحالة الخاص بك.\n\nللمالك: /setverify لاختيار طريقة التحقق، و /addsticker لإضافة ملصقات التحقق.")
+    await update.message.reply_text(
+        "هذا بوت إحالات وتحقق.\n"
+        "استخدم زر «رابط الإحالة» للحصول على رابطك.\n\n"
+        "للمالك: استخدم «إعداد التحقق» لاختيار الطريقة، "
+        "و«إضافة الملصقات» لحفظ ملصقات التحقق.",
+        reply_markup=main_keyboard(update.effective_user.id)
+    )
 
 # الدالة الرئيسية
 def main():
