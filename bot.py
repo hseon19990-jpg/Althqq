@@ -216,6 +216,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # معالج الرسائل النصية
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.sticker:
+        await handle_sticker(update, context)
+        return
+    if update.message.contact:
+        await handle_contact(update, context)
+        return
+    if not update.message.text:
+        return
+
     user_id = update.effective_user.id
     user = get_user(user_id)
     if not user:
@@ -470,9 +479,7 @@ def main():
     app.add_handler(CommandHandler("addsticker", add_sticker))
     app.add_handler(CallbackQueryHandler(handle_set_verify_callback, pattern="^set:"))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
-    app.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
